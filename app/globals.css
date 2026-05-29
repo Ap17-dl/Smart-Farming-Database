@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #f5f9f1;
+  --surface: #ffffff;
+  --text: #1f2937;
+  --muted: #6b7280;
+  --line: #e5e7eb;
+}
+
+body {
+  background: radial-gradient(circle at top left, #e2efdc 0%, var(--bg) 55%);
+  color: var(--text);
+}
+
+.card {
+  @apply rounded-2xl border border-slate-200 bg-white shadow-sm;
+}
+
+.btn {
+  @apply rounded-lg bg-brand-600 px-3 py-2 font-medium text-white transition hover:bg-brand-700;
+}
+
+.input {
+  @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-brand-600 focus:ring-2;
+}
