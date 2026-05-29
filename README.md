@@ -1,6 +1,6 @@
-# Smart Farming Management System (Redis + Supabase)
+# Smart Farming Management System (Supabase PostgreSQL)
 
-A full-stack Smart Farming Management System built with Next.js, Redis, and Supabase authentication.
+A full-stack Smart Farming Management System built with Next.js and Supabase (Auth + PostgreSQL).
 
 ## Features
 
@@ -11,19 +11,18 @@ A full-stack Smart Farming Management System built with Next.js, Redis, and Supa
 - Sensor Management (sensor registry + reading history)
 - Additional modules: Lands, Plantings, Markets
 - Supabase email/password authentication
-- Redis-backed backend with real-time API-driven updates
+- Supabase PostgreSQL-backed API routes
 
 ## Tech Stack
 
 - Frontend: Next.js, React, Tailwind CSS
 - Backend: Next.js Route Handlers
 - Auth: Supabase (`@supabase/ssr`)
-- Database: Redis (`ioredis`)
+- Database: Supabase PostgreSQL
 
 ## Prerequisites
 
 - Node.js 18+
-- Redis server (local or remote)
 - Supabase project
 
 ## Setup
@@ -31,30 +30,22 @@ A full-stack Smart Farming Management System built with Next.js, Redis, and Supa
 1. Install dependencies
 
 ```bash
-pnpm install
+npm install
 ```
 
 2. Configure environment variables
 
-```bash
-cp .env.example .env.local
-```
-
-Set values in `.env.local`:
+Create `.env.local`:
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your_supabase_anon_or_publishable_key
-REDIS_HOST=127.0.0.1
-REDIS_PORT=6379
-REDIS_PASSWORD=
 ```
 
-3. Start Redis (if local)
+3. Create database schema in Supabase
 
-```bash
-redis-server
-```
+- Open Supabase SQL Editor.
+- Run the SQL from [`supabase_schema.sql`](./supabase_schema.sql).
 
 4. Run app
 

@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Smart Farming Management System",
-  description: "Redis-powered farm management platform with Supabase authentication"
+  description: "Supabase PostgreSQL-powered farm management platform with Supabase authentication"
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

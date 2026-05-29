@@ -3,13 +3,18 @@ import { createClient } from "@/lib/supabase/server";
 import { getDashboardStats } from "@/lib/entities";
 
 export async function GET() {
-  const supabase = await createClient();
-  const { data } = await supabase.auth.getUser();
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase.auth.getUser();
 
-  if (!data.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!data.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const stats = await getDashboardStats();
+    return NextResponse.json(stats);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Server error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  const stats = await getDashboardStats();
-  return NextResponse.json(stats);
 }

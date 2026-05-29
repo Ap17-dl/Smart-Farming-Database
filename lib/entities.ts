@@ -1,8 +1,6 @@
 import { z } from "zod";
-import { ensureRedisConnection, redis } from "@/lib/redis";
+import { createClient } from "@/lib/supabase/server";
 import type { EntityName } from "@/types/entities";
-
-const now = () => new Date().toISOString();
 
 const schemaMap = {
   farmers: z.object({
@@ -12,7 +10,7 @@ const schemaMap = {
     location: z.string().optional()
   }),
   lands: z.object({
-    farmerId: z.string().min(1),
+    farmerId: z.string().uuid(),
     landName: z.string().min(1),
     acreage: z.coerce.number().positive(),
     soilType: z.string().optional()
@@ -23,9 +21,9 @@ const schemaMap = {
     variety: z.string().optional()
   }),
   plantings: z.object({
-    farmerId: z.string().min(1),
-    landId: z.string().min(1),
-    cropId: z.string().min(1),
+    farmerId: z.string().uuid(),
+    landId: z.string().uuid(),
+    cropId: z.string().uuid(),
     plantedOn: z.string().min(1),
     expectedHarvestOn: z.string().optional()
   }),
@@ -36,7 +34,7 @@ const schemaMap = {
     location: z.string().optional()
   }),
   sensor_data: z.object({
-    sensorId: z.string().min(1),
+    sensorId: z.string().uuid(),
     reading: z.coerce.number(),
     recordedAt: z.string().min(1)
   }),
@@ -45,9 +43,9 @@ const schemaMap = {
     city: z.string().min(1)
   }),
   sales: z.object({
-    farmerId: z.string().min(1),
-    cropId: z.string().min(1),
-    marketId: z.string().optional(),
+    farmerId: z.string().uuid(),
+    cropId: z.string().uuid(),
+    marketId: z.string().uuid().optional(),
     quantity: z.coerce.number().positive(),
     price: z.coerce.number().positive(),
     saleDate: z.string().min(1)
@@ -55,14 +53,6 @@ const schemaMap = {
 } as const;
 
 export const validEntities = Object.keys(schemaMap) as EntityName[];
-
-const setKey = (entity: EntityName) => `sf:${entity}:ids`;
-const itemKey = (entity: EntityName, id: string) => `sf:${entity}:${id}`;
-
-const parseJSON = <T>(value: string | null): T | null => {
-  if (!value) return null;
-  return JSON.parse(value) as T;
-};
 
 export function isEntity(value: string): value is EntityName {
   return validEntities.includes(value as EntityName);
@@ -76,107 +66,124 @@ export function validateEntityInput(entity: EntityName, input: unknown) {
   return { ok: true as const, data: parsed.data };
 }
 
-export async function createRecord(entity: EntityName, data: Record<string, unknown>) {
-  await ensureRedisConnection();
-  const id = crypto.randomUUID();
-  const timestamp = now();
+function formatSupabaseError(error: {
+  message: string;
+  code?: string | null;
+  details?: string | null;
+  hint?: string | null;
+}) {
+  const code = error.code ?? "UNKNOWN";
+  const details = error.details ? ` Details: ${error.details}` : "";
+  const hint = error.hint ? ` Hint: ${error.hint}` : "";
 
-  const record = {
-    ...data,
-    id,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-    ...(entity === "sales"
+  if (code === "42P01") {
+    return `Database tables are missing. Run supabase_schema.sql in Supabase SQL Editor. (${code})`;
+  }
+
+  return `${error.message} (${code})${details}${hint}`;
+}
+
+export async function createRecord(entity: EntityName, data: Record<string, unknown>) {
+  const supabase = await createClient();
+  const payload =
+    entity === "sales"
       ? {
+          ...data,
           revenue: Number(data.quantity) * Number(data.price)
         }
-      : {})
-  };
+      : data;
 
-  await redis.multi().set(itemKey(entity, id), JSON.stringify(record)).sadd(setKey(entity), id).exec();
-  return record;
+  const { data: created, error } = await supabase.from(entity).insert(payload).select().single();
+
+  if (error) throw new Error(formatSupabaseError(error));
+  return created;
 }
 
 export async function listRecords(entity: EntityName) {
-  await ensureRedisConnection();
-  const ids = await redis.smembers(setKey(entity));
-  if (ids.length === 0) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase.from(entity).select("*").order("createdAt", { ascending: false });
 
-  const keys = ids.map((id) => itemKey(entity, id));
-  const values = await redis.mget(keys);
-
-  return values
-    .map((v) => parseJSON<Record<string, unknown>>(v))
-    .filter((v): v is Record<string, unknown> => v !== null)
-    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  if (error) throw new Error(formatSupabaseError(error));
+  return data ?? [];
 }
 
 export async function getRecord(entity: EntityName, id: string) {
-  await ensureRedisConnection();
-  const value = await redis.get(itemKey(entity, id));
-  return parseJSON<Record<string, unknown>>(value);
+  const supabase = await createClient();
+  const { data, error } = await supabase.from(entity).select("*").eq("id", id).maybeSingle();
+
+  if (error) throw new Error(formatSupabaseError(error));
+  return data;
 }
 
 export async function updateRecord(entity: EntityName, id: string, patch: Record<string, unknown>) {
-  await ensureRedisConnection();
-  const existing = await getRecord(entity, id);
-  if (!existing) return null;
+  const supabase = await createClient();
 
-  const merged = {
-    ...existing,
-    ...patch,
-    id,
-    createdAt: existing.createdAt,
-    updatedAt: now(),
-    ...(entity === "sales"
+  const payload =
+    entity === "sales"
       ? {
-          revenue: Number(patch.quantity ?? existing.quantity) * Number(patch.price ?? existing.price)
+          ...patch,
+          revenue: Number(patch.quantity) * Number(patch.price)
         }
-      : {})
-  };
+      : patch;
 
-  await redis.set(itemKey(entity, id), JSON.stringify(merged));
-  return merged;
+  const { data, error } = await supabase.from(entity).update(payload).eq("id", id).select().maybeSingle();
+
+  if (error) throw new Error(formatSupabaseError(error));
+  return data;
 }
 
 export async function deleteRecord(entity: EntityName, id: string) {
-  await ensureRedisConnection();
-  const deleted = await redis.multi().del(itemKey(entity, id)).srem(setKey(entity), id).exec();
-  return deleted?.length ? true : false;
+  const supabase = await createClient();
+  const { error } = await supabase.from(entity).delete().eq("id", id);
+
+  if (error) throw new Error(formatSupabaseError(error));
+  return true;
 }
 
 export async function searchFarmers(query: string) {
-  const farmers = await listRecords("farmers");
-  const q = query.toLowerCase();
+  const supabase = await createClient();
+  const q = query.trim();
 
-  return farmers.filter((farmer) => {
-    const name = String(farmer.name ?? "").toLowerCase();
-    const phone = String(farmer.phone ?? "").toLowerCase();
-    return name.includes(q) || phone.includes(q);
-  });
+  const { data, error } = await supabase
+    .from("farmers")
+    .select("*")
+    .or(`name.ilike.%${q}%,phone.ilike.%${q}%`)
+    .order("createdAt", { ascending: false });
+
+  if (error) throw new Error(formatSupabaseError(error));
+  return data ?? [];
 }
 
 export async function getDashboardStats() {
-  const [farmers, crops, sales, sensors, sensorData] = await Promise.all([
-    listRecords("farmers"),
-    listRecords("crops"),
-    listRecords("sales"),
-    listRecords("sensors"),
-    listRecords("sensor_data")
+  const supabase = await createClient();
+
+  const [farmers, crops, sales, sensors, sensorData, salesForRevenue, recentSales, recentSensorData] = await Promise.all([
+    supabase.from("farmers").select("id", { count: "exact", head: true }),
+    supabase.from("crops").select("id", { count: "exact", head: true }),
+    supabase.from("sales").select("id", { count: "exact", head: true }),
+    supabase.from("sensors").select("id", { count: "exact", head: true }),
+    supabase.from("sensor_data").select("id", { count: "exact", head: true }),
+    supabase.from("sales").select("revenue"),
+    supabase.from("sales").select("*").order("createdAt", { ascending: false }).limit(5),
+    supabase.from("sensor_data").select("*").order("createdAt", { ascending: false }).limit(5)
   ]);
 
-  const totalRevenue = sales.reduce((sum, sale) => sum + Number(sale.revenue ?? 0), 0);
+  for (const result of [farmers, crops, sales, sensors, sensorData, salesForRevenue, recentSales, recentSensorData]) {
+    if (result.error) throw new Error(formatSupabaseError(result.error));
+  }
+
+  const totalRevenue = (salesForRevenue.data ?? []).reduce((sum, sale) => sum + Number(sale.revenue ?? 0), 0);
 
   return {
     totals: {
-      farmers: farmers.length,
-      crops: crops.length,
-      sales: sales.length,
-      sensors: sensors.length,
-      sensorReadings: sensorData.length
+      farmers: farmers.count ?? 0,
+      crops: crops.count ?? 0,
+      sales: sales.count ?? 0,
+      sensors: sensors.count ?? 0,
+      sensorReadings: sensorData.count ?? 0
     },
     totalRevenue,
-    recentSales: sales.slice(0, 5),
-    recentSensorData: sensorData.slice(0, 5)
+    recentSales: recentSales.data ?? [],
+    recentSensorData: recentSensorData.data ?? []
   };
 }

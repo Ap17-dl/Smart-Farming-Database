@@ -13,7 +13,7 @@ export default async function HomePage() {
         <p className="text-sm font-semibold uppercase tracking-[0.2em] text-brand-700">Smart Farming</p>
         <h1 className="mt-4 text-4xl font-bold text-slate-900">Farm operations, sales, and sensors in one dashboard</h1>
         <p className="mt-4 max-w-2xl text-slate-600">
-          Manage farmers, crops, land records, planting cycles, market sales, and IoT sensor data with real-time sync through Redis.
+          Manage farmers, crops, land records, planting cycles, market sales, and IoT sensor data with Supabase PostgreSQL.
         </p>
         <div className="mt-8 flex gap-3">
           {user ? (
