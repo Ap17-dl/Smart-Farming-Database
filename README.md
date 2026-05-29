@@ -53,8 +53,6 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your_supabase_anon_or_publishable_key
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000)
-
 ## API Endpoints
 
 - `GET/POST /api/[entity]`
