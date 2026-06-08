@@ -34,7 +34,7 @@ export default function LoginPage() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md items-center px-6 py-12">
       <section className="card w-full p-8">
-        <h1 className="text-2xl font-bold">Supabase Authentication</h1>
+        <h1 className="text-2xl font-bold">Welcome! </h1>
         <p className="mt-2 text-sm text-slate-600">Use email/password to access the Smart Farming dashboard.</p>
 
         <form onSubmit={onSubmit} className="mt-6 space-y-4">
